@@ -28,7 +28,7 @@ For each tick:
 
 After the final tick, the 64-bit representations of the positions are mixed into a 64-bit FNV-style state. Each output character is selected from printable ASCII values 33–126. The password length equals the number of rollers.
 
-For identical parameters and speeds, the computation is deterministic. The implementation advances ticks in order; this describes how this program evaluates the recurrence and is not a proof that no alternative implementation or acceleration is possible. Updates within one tick read the old state and write separate positions.
+For identical parameters and speeds, the computation is deterministic on compatible IEEE-754/math-library implementations. Each tick depends on the previous tick's state. The roller updates within a tick can be evaluated in parallel without changing the recurrence's result: they all read `old_positions` and write distinct positions. This can reduce wall-clock time, but it does not skip tick transitions. The available per-tick parallel width is bounded by the roller count (5–20); tick count is the main sequential-depth parameter and can be calibrated for a chosen reference machine. Changing the roller count or tick count creates a different instance and generally a different password. Whether a more general fast-forward shortcut exists remains a research question.
 
 ## Dependencies and requirements
 
@@ -119,3 +119,10 @@ This project demonstrates a configurable computational delay. Its generated sour
 
 The parameter generator uses `std::mt19937`, which is not a cryptographic random-number generator, and the final mixing uses FNV-style arithmetic, which is not a cryptographic hash. Do not use this implementation to generate production passwords, wallet keys, encryption keys, or other security-critical secrets. The project does not implement a verifiable delay function (VDF), provide a proof of work, or establish a formal guarantee against shortcuts.
 
+## License
+
+MIT
+
+## Author
+
+xdanielex
