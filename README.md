@@ -119,10 +119,3 @@ This project demonstrates a configurable computational delay. Its generated sour
 
 The parameter generator uses `std::mt19937`, which is not a cryptographic random-number generator, and the final mixing uses FNV-style arithmetic, which is not a cryptographic hash. Do not use this implementation to generate production passwords, wallet keys, encryption keys, or other security-critical secrets. The project does not implement a verifiable delay function (VDF), provide a proof of work, or establish a formal guarantee against shortcuts.
 
-## License
-
-MIT
-
-## Author
-
-xdanielex
