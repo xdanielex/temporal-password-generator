@@ -1,76 +1,123 @@
 # Temporal Password Generator
 
-Small C++11 program that generates roller parameters, writes a standalone C++ source file, and can calculate the corresponding password.
+A C++11 experiment that derives a printable password by evaluating a configurable, tick-by-tick computation. The generated source contains the roller parameters and the algorithm, **not a precomputed password string**. It produces the password only after running the configured number of ticks.
 
-## Dependencies
+The tick count measures the amount of work requested; it does not promise a fixed wall-clock delay. Actual runtime depends on the computer, compiler, and math library.
 
-- No third-party libraries.
-- The program uses only the C++11 standard library.
-- A C++11 compiler is needed to build the generator and, separately, to compile the emitted source into an executable. The generator itself does **not** invoke a compiler, a shell, or another program at runtime.
+## How it works
 
-The generated file, `temporal_password_exe.cpp`, is self-contained apart from the standard C++ library.
+1. Choose the number of rollers (5–20) and ticks (1,000–100,000,000,000,000).
+2. The generator creates roller speeds and writes `temporal_password_exe.cpp` in the current directory. The generated source embeds the parameters with enough decimal precision to reproduce the values.
+3. In interactive mode or with `--generate`, the generator evaluates the computation once and prints the password when it finishes.
+4. The emitted C++ source can be compiled separately. When run, that program performs the same computation and prints its result.
 
-## Build
+The generator does **not** invoke a shell, compiler, or generated executable. It does not automatically compile or run the emitted source.
+
+## Algorithm
+
+All roller positions start at zero. At each tick, the program first snapshots the previous positions, then updates each roller using its own speed and the next roller's previous position:
+
+```text
+For each tick:
+  old_positions = positions
+  For each roller i:
+    position[i] = old_positions[i] + speed[i]
+    position[i] += 0.3 * sin(old_positions[next] * 3.14159)
+    position[i] = round(position[i] * 100) / 100
+```
+
+After the final tick, the 64-bit representations of the positions are mixed into a 64-bit FNV-style state. Each output character is selected from printable ASCII values 33–126. The password length equals the number of rollers.
+
+For identical parameters and speeds, the computation is deterministic. The implementation advances ticks in order; this describes how this program evaluates the recurrence and is not a proof that no alternative implementation or acceleration is possible. Updates within one tick read the old state and write separate positions.
+
+## Dependencies and requirements
+
+- C++11-compatible compiler, such as g++ or clang++.
+- C++ standard library only; no third-party libraries.
+- A compiler is required to build the program and, separately, to compile the generated source. The running generator itself does not launch a compiler.
+- The implementation requires 64-bit IEEE-754 `double` values; this is checked at compile time.
+
+## Build the generator
 
 ```bash
 g++ -std=c++11 -O2 -Wall -Wextra -Wpedantic \
     temporal_password_generator.cpp -o temporal_password_generator
 ```
 
-Clang can be used instead of g++:
+Or with Clang:
 
 ```bash
-clang++ -std=c++11 -O2 temporal_password_generator.cpp \
-    -o temporal_password_generator
+clang++ -std=c++11 -O2 -Wall -Wextra -Wpedantic \
+    temporal_password_generator.cpp -o temporal_password_generator
 ```
 
-## Run
+## Usage
 
-Interactive mode writes the generated source and calculates the password once in the generator process:
+### Interactive mode
 
 ```bash
 ./temporal_password_generator
 ```
 
-The accepted ranges are 5–20 rollers and 1,000–100,000,000,000,000 ticks.
+The program prompts for the roller count and tick count, writes `temporal_password_exe.cpp`, estimates the runtime, then computes and prints the password. The estimate is rough; the calculation itself takes the time required by the selected hardware.
 
-To write the source without running the tick loop:
-
-```bash
-./temporal_password_generator --emit 5 1000 12345
-```
-
-To write the source and calculate the password once:
+### Generate source and calculate the password
 
 ```bash
 ./temporal_password_generator --generate 5 1000 12345
 ```
 
-The optional third argument is a 32-bit seed, useful for reproducing tests. Omit it to seed parameter generation from `std::random_device`.
+Arguments are `--generate R T [SEED]`: roller count, tick count, and an optional 32-bit seed. Supplying a seed makes the generated roller speeds reproducible. Without a seed, the program obtains one from `std::random_device`.
 
-The emitted program is compiled separately:
+### Generate source only
 
 ```bash
-g++ -std=c++11 -O2 -Wall -Wextra -Wpedantic \
-    temporal_password_exe.cpp -o temporal_password_exe
+./temporal_password_generator --emit 5 1000 12345
+```
+
+`--emit` writes `temporal_password_exe.cpp` but does not calculate or print the password in the generator process. The emitted program still performs the full computation when compiled and run.
+
+### Compile and run the emitted source
+
+```bash
+g++ -std=c++11 -O2 temporal_password_exe.cpp -o temporal_password_exe
 ./temporal_password_exe
 ```
 
-## Tests
-
-The built-in smoke test checks determinism and output length/character range for fixed inputs:
+### Help and self-test
 
 ```bash
+./temporal_password_generator --help
 ./temporal_password_generator --self-test
 ```
 
-For an end-to-end test, use a small tick count, compile the emitted source, and compare its `PASSWORD:` line with the generator's output. A fixed seed makes the parameters reproducible.
+The self-test checks that fixed inputs produce a deterministic, correctly sized password using printable ASCII. It is a smoke test, not a benchmark or a cryptographic audit.
 
-## Algorithm
+## Runtime estimates
 
-For each tick, each roller is updated from the previous tick's positions using its fixed speed, a coupling term based on the next roller, and rounding to two decimal places. The final positions are mixed into a 64-bit FNV-style state and mapped to printable ASCII characters.
+The generator estimates runtime using a fixed reference rate of about 11.45 million roller updates per second. This is a rough estimate, not an automatic benchmark of the current machine.
 
-The update recurrence and hash behavior in this version have been kept unchanged. Time estimates are approximate and depend on compiler, math library, and hardware; the configured tick count is a work parameter, not a guaranteed wall-clock duration.
+| Approximate target | Rollers | Ticks | Password length |
+|---|---:|---:|---:|
+| ~6.5 seconds | 15 | 5,000,000 | 15 characters |
+| ~2.2 minutes | 15 | 100,000,000 | 15 characters |
+| ~30 days | 20 | 1,500,000,000,000 | 20 characters |
+| ~1 year | 20 | 18,000,000,000,000 | 20 characters |
+| ~5.5 years (maximum tick count) | 20 | 100,000,000,000,000 | 20 characters |
+
+The generator's calculation and the emitted program each perform their own complete computation when run. Thus, if you use `--generate` and later run the emitted program, each run incurs the configured work once.
+
+## Output and reproducibility
+
+- `temporal_password_exe.cpp` is written to the current working directory and contains hardcoded roller speeds and tick count.
+- The generator prints the speeds at round-trip precision so they can be reproduced from the generated source.
+- The output is deterministic for identical roller speeds, tick count, compiler/runtime behavior, and floating-point math results.
+
+## Scope and security notes
+
+This project demonstrates a configurable computational delay. Its generated source does not contain the password as a literal; the program calculates and prints the output after the ticks. The algorithm and parameters are visible in the generated source.
+
+The parameter generator uses `std::mt19937`, which is not a cryptographic random-number generator, and the final mixing uses FNV-style arithmetic, which is not a cryptographic hash. Do not use this implementation to generate production passwords, wallet keys, encryption keys, or other security-critical secrets. The project does not implement a verifiable delay function (VDF), provide a proof of work, or establish a formal guarantee against shortcuts.
 
 ## License
 
